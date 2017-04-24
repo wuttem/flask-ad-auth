@@ -3,7 +3,7 @@
 
 from flask_login import *
 
-from ad_login import ADAuth, ad_group_required
+from ad_login import ADAuth, ad_group_required, ad_required
 
 __all__ = [
     ADAuth.__name__,
@@ -39,4 +39,6 @@ __all__ = [
     'encode_cookie',
     'decode_cookie',
     'make_next_param',
+    'ad_group_required',
+    'ad_required'
 ]

@@ -13,7 +13,7 @@ import requests
 import functools
 from collections import namedtuple
 
-from flask import current_app, request, abort, redirect, make_response
+from flask import current_app, request, abort, redirect, make_response, g
 from flask import _app_ctx_stack as stack
 from flask_login import LoginManager, login_user, current_user
 
@@ -46,6 +46,25 @@ def ad_group_required(ad_group):
     return decorater
 
 
+def ad_required(func):
+    """
+    This will ensure that only an user with the basic AD group
+    may access the decorated view.
+    """
+    @functools.wraps(func)
+    def decorated_view(*args, **kwargs):
+        if current_app.login_manager._login_disabled:
+            return func(*args, **kwargs)
+        elif not current_user.is_authenticated:
+            return current_app.login_manager.unauthorized()
+        elif current_app.config["AD_AUTH_GROUP"] and not current_user.is_in_default_group():
+            if current_app.config["AD_GROUP_FORBIDDEN_REDIRECT"]:
+                return redirect(current_app.config["AD_GROUP_FORBIDDEN_REDIRECT"])
+            return abort(make_response("You dont have the necessary group to access this view", 403))
+        return func(*args, **kwargs)
+    return decorated_view
+
+
 class User(object):
     def __init__(self, email, access_token, refresh_token, expires_on,
                  token_type, resource, scope, group_string=None):
@@ -71,7 +90,7 @@ class User(object):
 
     @property
     def is_expired(self):
-        if (self.expires_on - 3590) > time.time():
+        if (self.expires_on - 10) > time.time():
             return False
         return True
 
@@ -81,6 +100,9 @@ class User(object):
         else:
             logger.warning("User {} not in group {}".format(self.email, group))
             return False
+
+    def is_in_default_group(self):
+        return self.is_in_group(current_app.config["AD_AUTH_GROUP"])
 
     @property
     def is_active(self):
@@ -141,6 +163,7 @@ class ADAuth(LoginManager):
         app.config.setdefault("AD_CALLBACK_PATH", '/connect/get_token')
         app.config.setdefault("AD_LOGIN_REDIRECT", '/')
         app.config.setdefault("AD_GROUP_FORBIDDEN_REDIRECT", None)
+        app.config.setdefault("AD_AUTH_GROUP", None)
 
         if hasattr(app, 'teardown_appcontext'):
             app.teardown_appcontext(self.teardown_db)
@@ -355,19 +378,20 @@ class ADAuth(LoginManager):
         return None
 
     def load_user(self, email):
-        logger.info("loading user %s", email)
+        logger.debug("loading user %s", email)
         user = self.query_user(email)
-        print user.scope
         # User exists in db
         if user:
             # Still valid
             if not user.is_expired:
+                g.user_id = user.email
                 return user
             # Try to refresh with refresh token
             else:
                 logger.warning("Refreshing user %s", email)
                 user.full_refresh()
                 self.store_user(user)
+                g.user_id = user.email
                 return user
         logger.warning("User %s not in database", email)
         # We need a new authentication
