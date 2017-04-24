@@ -13,7 +13,7 @@ import requests
 import functools
 from collections import namedtuple
 
-from flask import current_app, request, abort, redirect, make_response, g
+from flask import current_app, request, abort, redirect, make_response, g, flash
 from flask import _app_ctx_stack as stack
 from flask_login import LoginManager, login_user, current_user
 
@@ -348,6 +348,9 @@ class ADAuth(LoginManager):
         self.store_user(user)
         login_user(user, remember=True) # Todo Remember me
         logger.warning("User %s logged in", user.email)
+        # Todo we should add an on login callback here
+        # Or maybe redirect to next...
+        flash("Logged in!", "success")
         return redirect(current_app.config["AD_LOGIN_REDIRECT"])
 
     def store_user(self, user):
