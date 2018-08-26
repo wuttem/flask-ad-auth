@@ -139,6 +139,31 @@ class User(object):
             out.append({"id": g, "name": names.get(g, "unknown")})
         return out
 
+    def to_dict(self):
+        return {
+            "email": self.email,
+            "access_token": self.access_token,
+            "refresh_token": self.refresh_token,
+            "expires_on": self.expires_on,
+            "token_type": self.token_type,
+            "resource": self.resource,
+            "scope": self.scope,
+            "group_string": self.group_string
+        }
+
+    @classmethod
+    def from_dict(cls, d):
+        return cls(
+            email=d["email"],
+            access_token=d["access_token"],
+            refresh_token=d["refresh_token"],
+            expires_on=int(d["expires_on"]),
+            token_type=d["token_type"],
+            resource=d["resource"],
+            scope=d["scope"],
+            group_string=d["group_string"]
+        )
+
 
 class ADAuth(LoginManager):
     def __init__(self, app=None, add_context_processor=True):
@@ -147,6 +172,8 @@ class ADAuth(LoginManager):
         """
         super(ADAuth, self).__init__(
             app=app, add_context_processor=add_context_processor)
+        self.connection_class = SQLiteDatabase
+        self.connected = False
 
     def init_app(self, app, add_context_processor=True):
         """
@@ -180,43 +207,32 @@ class ADAuth(LoginManager):
 
         self.user_callback = self.load_user
 
-    def _connect_db(self):
-        """
-        Connect to SQLite3 database. This will create a new user table if
-        it doesnt exist.
-        """
-        conn = sqlite3.connect(current_app.config['AD_SQLITE_DB'])
-        conn.execute("CREATE TABLE IF NOT EXISTS users ("
-                     "email TEXT PRIMARY KEY, "
-                     "refresh_token TEXT, "
-                     "access_token TEXT, "
-                     "expires_on INTEGER, "
-                     "token_type TEXT, "
-                     "resource TEXT, "
-                     "scope TEXT,"
-                     "groups TEXT);")
-        conn.commit()
-        return conn
+    def setDatabaseClass(self, my_class):
+        if self.connected:
+            raise RuntimeError("Connection class change after connecting")
+        self.connection_class = my_class
 
     def teardown_db(self, exception):
         """
-        Close Sqlite3 database connection.
+        Close database connection.
         """
         ctx = stack.top
-        if hasattr(ctx, 'sqlite3_db'):
-            ctx.sqlite3_db.close()
+        if hasattr(ctx, 'adauth_db'):
+            ctx.adauth_db.close()
 
     @property
     def db_connection(self):
         """
-        Sqlite3 connection property. Use this to get the connection.
+        Connection property. Use this to get the connection.
         It will create a reusable connection on the flask context.
         """
         ctx = stack.top
         if ctx is not None:
-            if not hasattr(ctx, 'sqlite3_db'):
-                ctx.sqlite3_db = self._connect_db()
-            return ctx.sqlite3_db
+            if not hasattr(ctx, 'adauth_db'):
+                ctx.adauth_db = self.connection_class()
+                ctx.adauth_db.connect()
+                self.connected = True
+            return ctx.adauth_db
 
     @property
     def sign_in_url(self):
@@ -358,31 +374,17 @@ class ADAuth(LoginManager):
         Store user in database. This will insert or replace the user with
         given email.
         """
-        c = self.db_connection.cursor()
-        c.execute("INSERT OR REPLACE INTO users (email, access_token, refresh_token, expires_on, "
-                  "token_type, resource, scope, groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                  (user.email, user.access_token, user.refresh_token, user.expires_on,
-                   user.token_type, user.resource, user.scope, user.group_string))
-        self.db_connection.commit()
-        return user
+        return self.db_connection.store_user(user)
 
-    def query_user(self, email):
+    def get_user(self, email):
         """
         Query User from db. Will return the user object or None.
         """
-        c = self.db_connection.cursor()
-        c.execute("SELECT email, access_token, refresh_token, expires_on, "
-                  "token_type, resource, scope, groups FROM users WHERE email=?", (unicode(email),))
-        row = c.fetchone()
-        if row:
-            return User(email=row[0], access_token=row[1], refresh_token=row[2],
-                        expires_on=int(row[3]), token_type=row[4], resource=row[5],
-                        scope=row[6], group_string=row[7])
-        return None
+        return self.db_connection.get_user(email)
 
     def load_user(self, email):
         logger.debug("loading user %s", email)
-        user = self.query_user(email)
+        user = self.get_user(email)
         # User exists in db
         if user:
             # Still valid
@@ -401,3 +403,58 @@ class ADAuth(LoginManager):
         # maybe reload sign_in_url automatically
         return None
 
+
+class SQLiteDatabase(object):
+    def __init__(self, config):
+        self.config = config
+        self.conn = None
+
+    def connect(self):
+        """
+        Connect to SQLite3 database. This will create a new user table if
+        it doesnt exist.
+        """
+        conn = sqlite3.connect(self.config['AD_SQLITE_DB'])
+        conn.execute("CREATE TABLE IF NOT EXISTS users ("
+                        "email TEXT PRIMARY KEY, "
+                        "refresh_token TEXT, "
+                        "access_token TEXT, "
+                        "expires_on INTEGER, "
+                        "token_type TEXT, "
+                        "resource TEXT, "
+                        "scope TEXT,"
+                        "groups TEXT);")
+        conn.commit()
+        self.conn = conn
+        return conn
+
+    def close(self):
+        if self.conn is not None:
+            self.conn.close()
+
+    def store_user(self, user):
+        """
+        Store user in database. This will insert or replace the user with
+        given email.
+        """
+        c = self.conn.cursor()
+        c.execute("INSERT OR REPLACE INTO users (email, access_token, refresh_token, expires_on, "
+                  "token_type, resource, scope, groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                  (user.email, user.access_token, user.refresh_token, user.expires_on,
+                   user.token_type, user.resource, user.scope, user.group_string))
+        self.conn.commit()
+        return user
+
+    def get_user(self, email):
+        """
+        Get User from db. Will return the user object or None.
+        """
+        c = self.db_connection.cursor()
+        c.execute("SELECT email, access_token, refresh_token, expires_on, "
+                  "token_type, resource, scope, groups FROM users WHERE email=?", (unicode(email),))
+        row = c.fetchone()
+        if row:
+            return User(email=row[0], access_token=row[1], refresh_token=row[2],
+                        expires_on=int(row[3]), token_type=row[4], resource=row[5],
+                        scope=row[6], group_string=row[7])
+        return None
