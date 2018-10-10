@@ -2,8 +2,13 @@
 # coding: utf8
 
 import sqlite3
-import urllib
-import urlparse
+
+try:
+    from urlparse import urlparse, urlunparse
+    from urllib import urlencode
+except ModuleNotFoundError:
+    from urllib.parse import urlparse, urlunparse, urlencode
+
 import json
 import logging
 import base64
@@ -12,6 +17,11 @@ import time
 import requests
 import functools
 from collections import namedtuple
+
+try:
+    import redis
+except Exception:
+    redis = None
 
 from flask import current_app, request, abort, redirect, make_response, g, flash
 from flask import _app_ctx_stack as stack
@@ -180,12 +190,16 @@ class ADAuth(LoginManager):
         Flask extension init method. We add our variables and
         startup code. Then we just use the init method of the parent.
         """
+        app.config.setdefault("AD_STORAGE", "sqlite")
+        app.config.setdefault("AD_REDIS_HOST", "localhost")
+        app.config.setdefault("AD_REDIS_PORT", "6379")
+        app.config.setdefault("AD_REDIS_DB", 0)
         app.config.setdefault("AD_SQLITE_DB", "file::memory:?cache=shared")
         app.config.setdefault("AD_APP_ID", None)
         app.config.setdefault("AD_APP_KEY", None)
         app.config.setdefault("AD_REDIRECT_URI", None)
         app.config.setdefault("AD_AUTH_URL", 'https://login.microsoftonline.com/common/oauth2/authorize')
-        app.config.setdefault("AD_SQLITE_DB", 'https://login.microsoftonline.com/common/oauth2/token')
+        app.config.setdefault("AD_TOKEN_URL", 'https://login.microsoftonline.com/common/oauth2/token')
         app.config.setdefault("AD_GRAPH_URL", 'https://graph.windows.net')
         app.config.setdefault("AD_CALLBACK_PATH", '/connect/get_token')
         app.config.setdefault("AD_LOGIN_REDIRECT", '/')
@@ -200,6 +214,14 @@ class ADAuth(LoginManager):
         # Register Callback
         app.add_url_rule(app.config["AD_CALLBACK_PATH"], "oauth_callback",
                          self.oauth_callback)
+
+        # Set Storage
+        if app.config["AD_STORAGE"] == "sqlite":
+            self.setDatabaseClass(SQLiteDatabase)
+        elif app.config["AD_STORAGE"] == "redis":
+            self.setDatabaseClass(RedisDatabase)
+        else:
+            raise ValueError("unknown storage {}".format(app.config["AD_STORAGE"]))
 
         # Parent init call
         super(ADAuth, self).init_app(
@@ -229,7 +251,7 @@ class ADAuth(LoginManager):
         ctx = stack.top
         if ctx is not None:
             if not hasattr(ctx, 'adauth_db'):
-                ctx.adauth_db = self.connection_class()
+                ctx.adauth_db = self.connection_class(current_app.config)
                 ctx.adauth_db.connect()
                 self.connected = True
             return ctx.adauth_db
@@ -239,14 +261,14 @@ class ADAuth(LoginManager):
         """
         URL you need to use to login with microsoft.
         """
-        url_parts = list(urlparse.urlparse(current_app.config["AD_AUTH_URL"]))
+        url_parts = list(urlparse(current_app.config["AD_AUTH_URL"]))
         auth_params = {
             'response_type': 'code',
             'redirect_uri': current_app.config["AD_REDIRECT_URI"],
             'client_id': current_app.config["AD_APP_ID"]
         }
-        url_parts[4] = urllib.urlencode(auth_params)
-        return urlparse.urlunparse(url_parts)
+        url_parts[4] = urlencode(auth_params)
+        return urlunparse(url_parts)
 
     @classmethod
     def datetime_from_timestamp(cls, timestamp):
@@ -449,12 +471,56 @@ class SQLiteDatabase(object):
         """
         Get User from db. Will return the user object or None.
         """
-        c = self.db_connection.cursor()
+        c = self.conn.cursor()
         c.execute("SELECT email, access_token, refresh_token, expires_on, "
-                  "token_type, resource, scope, groups FROM users WHERE email=?", (unicode(email),))
+                  "token_type, resource, scope, groups FROM users WHERE email=?", (email,))
         row = c.fetchone()
         if row:
             return User(email=row[0], access_token=row[1], refresh_token=row[2],
                         expires_on=int(row[3]), token_type=row[4], resource=row[5],
                         scope=row[6], group_string=row[7])
+        return None
+
+
+class RedisDatabase(object):
+    def __init__(self, config):
+        self.config = config
+        self.conn = None
+
+    def connect(self):
+        """
+        Connect to Redis.
+        """
+        conn = redis.StrictRedis(self.config["AD_REDIS_HOST"], self.config["AD_REDIS_PORT"],
+                                 self.config["AD_REDIS_DB"])
+        self.conn = conn
+        return conn
+
+    def close(self):
+        if self.conn is not None:
+            self.conn = None
+
+    def store_user(self, user):
+        """
+        Store user in database. This will insert or replace the user with
+        given email.
+        """
+
+        key = user.email
+        value = json.dumps(user.to_dict())
+
+        c = self.conn
+        c.hset("ad_auth_users", key, value)
+        return user
+
+    def get_user(self, email):
+        """
+        Get User from db. Will return the user object or None.
+        """
+
+        c = self.conn
+        raw = c.hget("ad_auth_users", email)
+        if raw:
+            d = json.loads(raw)
+            return User.from_dict(d)
         return None

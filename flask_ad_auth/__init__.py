@@ -3,7 +3,7 @@
 
 from flask_login import *
 
-from ad_login import ADAuth, ad_group_required, ad_required
+from .ad_login import ADAuth, ad_group_required, ad_required
 
 __all__ = [
     ADAuth.__name__,
