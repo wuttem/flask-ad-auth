@@ -77,7 +77,7 @@ def ad_required(func):
 
 class User(object):
     def __init__(self, email, access_token, refresh_token, expires_on,
-                 token_type, resource, scope, group_string=None):
+                 token_type, resource, scope, group_string=None, metadata=None):
         self.email = email
         self.access_token = access_token
         self.refresh_token = refresh_token
@@ -85,10 +85,27 @@ class User(object):
         self.token_type = token_type
         self.resource = resource
         self.scope = scope
+        self.metadata = {}
+        if metadata is not None:
+            self.metadata.update(metadata)
         if group_string is None:
             self.groups = []
         else:
             self.groups = filter(bool, group_string.split(";"))
+        self.ad_manager = None
+
+    def set_ad_manager(self, manager):
+        self.ad_manager = manager
+
+    def store(self):
+        if self.ad_manager is None:
+            raise RuntimeError("no ad_manager set for this user instance")
+        self.ad_manager.store_user(self)
+
+    def add_metadata(self, metadata_dict):
+        assert isinstance(metadata_dict, dict)
+        self.metadata.update(metadata_dict)
+        self.store()
 
     @property
     def group_string(self):
@@ -149,6 +166,9 @@ class User(object):
             out.append({"id": g, "name": names.get(g, "unknown")})
         return out
 
+    def get_ad_object(self):
+        return ADAuth.get_user_object(self.access_token)
+
     def to_dict(self):
         return {
             "email": self.email,
@@ -158,7 +178,8 @@ class User(object):
             "token_type": self.token_type,
             "resource": self.resource,
             "scope": self.scope,
-            "group_string": self.group_string
+            "group_string": self.group_string,
+            "metadata": self.metadata
         }
 
     @classmethod
@@ -171,12 +192,13 @@ class User(object):
             token_type=d["token_type"],
             resource=d["resource"],
             scope=d["scope"],
-            group_string=d["group_string"]
+            group_string=d["group_string"],
+            metadata=d.get("metadata", None)
         )
 
 
 class ADAuth(LoginManager):
-    def __init__(self, app=None, add_context_processor=True):
+    def __init__(self, app=None, add_context_processor=True, user_baseclass=None):
         """
         Flask extension constructor.
         """
@@ -184,6 +206,16 @@ class ADAuth(LoginManager):
             app=app, add_context_processor=add_context_processor)
         self.connection_class = SQLiteDatabase
         self.connected = False
+        self.on_login_callback = None
+        if user_baseclass is not None:
+            self.user_baseclass = user_baseclass
+        else:
+            self.user_baseclass = User
+
+    def set_user_baseclass(self, user_baseclass):
+        if self.connected:
+            raise RuntimeError("User base class change after connecting")
+        self.user_baseclass = user_baseclass
 
     def init_app(self, app, add_context_processor=True):
         """
@@ -198,6 +230,7 @@ class ADAuth(LoginManager):
         app.config.setdefault("AD_APP_ID", None)
         app.config.setdefault("AD_APP_KEY", None)
         app.config.setdefault("AD_REDIRECT_URI", None)
+        app.config.setdefault("AD_DOMAIN_FOR_GROUPS", "smaxtec.com")
         app.config.setdefault("AD_AUTH_URL", 'https://login.microsoftonline.com/common/oauth2/authorize')
         app.config.setdefault("AD_TOKEN_URL", 'https://login.microsoftonline.com/common/oauth2/token')
         app.config.setdefault("AD_GRAPH_URL", 'https://graph.windows.net')
@@ -251,7 +284,8 @@ class ADAuth(LoginManager):
         ctx = stack.top
         if ctx is not None:
             if not hasattr(ctx, 'adauth_db'):
-                ctx.adauth_db = self.connection_class(current_app.config)
+                ctx.adauth_db = self.connection_class(current_app.config,
+                                                      user_baseclass=self.user_baseclass)
                 ctx.adauth_db.connect()
                 self.connected = True
             return ctx.adauth_db
@@ -278,8 +312,7 @@ class ADAuth(LoginManager):
         timestamp = float(timestamp)
         return datetime.datetime.utcfromtimestamp(timestamp)
 
-    @classmethod
-    def get_user_token(cls, code):
+    def get_user_token(self, code):
         """
         Receive OAuth Token with the code received.
         """
@@ -308,9 +341,11 @@ class ADAuth(LoginManager):
         token_type = token['token_type']
         resource = token['resource']
         scope = token['scope']
-        return User(email=email, access_token=access_token,
-                    refresh_token=refresh_token, expires_on=expires_on,
-                    token_type=token_type, resource=resource, scope=scope)
+        user = self.user_baseclass(email=email, access_token=access_token,
+                                   refresh_token=refresh_token, expires_on=expires_on,
+                                   token_type=token_type, resource=resource, scope=scope)
+        user.set_ad_manager(self)
+        return user
 
     @classmethod
     def refresh_oauth_token(cls, refresh_token):
@@ -333,6 +368,22 @@ class ADAuth(LoginManager):
                             expires_on=r["expires_on"])
 
     @classmethod
+    def get_user_object(cls, access_token):
+        """
+        Get the AD User Object.
+        """
+        headers = {
+            "Authorization": "Bearer {}".format(access_token),
+            'Accept' : 'application/json'
+        }
+        params = {
+            "api-version": "1.6"
+        }
+        url = "{}/me".format(current_app.config["AD_GRAPH_URL"])
+        r = requests.get(url, headers=headers, params=params)
+        return r.json()
+
+    @classmethod
     def get_all_groups(cls, access_token):
         """
         Get a List of all groups in the organisation with their name.
@@ -344,7 +395,8 @@ class ADAuth(LoginManager):
         params = {
             "api-version": "1.6"
         }
-        url = "{}/smaxtec.com/groups".format(current_app.config["AD_GRAPH_URL"])
+        url = "{}/{}/groups".format(current_app.config["AD_GRAPH_URL"],
+                                    current_app.config["AD_DOMAIN_FOR_GROUPS"])
         r = requests.get(url, headers=headers, params=params)
         groups = []
         for g in r.json()["value"]:
@@ -383,13 +435,20 @@ class ADAuth(LoginManager):
         user = self.get_user_token(code)
         user.refresh_groups()
         # Write to db
+        user.set_ad_manager(self)
         self.store_user(user)
         login_user(user, remember=True) # Todo Remember me
         logger.warning("User %s logged in", user.email)
+        if self.on_login_callback is not None:
+            return self.on_login_callback(user)
         # Todo we should add an on login callback here
         # Or maybe redirect to next...
         flash("Logged in!", "success")
         return redirect(current_app.config["AD_LOGIN_REDIRECT"])
+
+    def set_on_login_callback(self, callback):
+        assert callable(callback)
+        self.on_login_callback = callback
 
     def store_user(self, user):
         """
@@ -402,7 +461,9 @@ class ADAuth(LoginManager):
         """
         Query User from db. Will return the user object or None.
         """
-        return self.db_connection.get_user(email)
+        u = self.db_connection.get_user(email)
+        u.set_ad_manager(self)
+        return u
 
     def load_user(self, email):
         logger.debug("loading user %s", email)
@@ -427,9 +488,13 @@ class ADAuth(LoginManager):
 
 
 class SQLiteDatabase(object):
-    def __init__(self, config):
+    def __init__(self, config, user_baseclass=None):
         self.config = config
         self.conn = None
+        if user_baseclass is None:
+            self.user_baseclass = User
+        else:
+            self.user_baseclass = user_baseclass
 
     def connect(self):
         """
@@ -445,7 +510,8 @@ class SQLiteDatabase(object):
                         "token_type TEXT, "
                         "resource TEXT, "
                         "scope TEXT,"
-                        "groups TEXT);")
+                        "groups TEXT,"
+                        "metadata TEXT);")
         conn.commit()
         self.conn = conn
         return conn
@@ -461,9 +527,9 @@ class SQLiteDatabase(object):
         """
         c = self.conn.cursor()
         c.execute("INSERT OR REPLACE INTO users (email, access_token, refresh_token, expires_on, "
-                  "token_type, resource, scope, groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                  "token_type, resource, scope, groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                   (user.email, user.access_token, user.refresh_token, user.expires_on,
-                   user.token_type, user.resource, user.scope, user.group_string))
+                   user.token_type, user.resource, user.scope, user.group_string, user.metadata))
         self.conn.commit()
         return user
 
@@ -473,19 +539,23 @@ class SQLiteDatabase(object):
         """
         c = self.conn.cursor()
         c.execute("SELECT email, access_token, refresh_token, expires_on, "
-                  "token_type, resource, scope, groups FROM users WHERE email=?", (email,))
+                  "token_type, resource, scope, groups, metadata FROM users WHERE email=?", (email,))
         row = c.fetchone()
         if row:
-            return User(email=row[0], access_token=row[1], refresh_token=row[2],
-                        expires_on=int(row[3]), token_type=row[4], resource=row[5],
-                        scope=row[6], group_string=row[7])
+            return self.user_baseclass(email=row[0], access_token=row[1], refresh_token=row[2],
+                                       expires_on=int(row[3]), token_type=row[4], resource=row[5],
+                                       scope=row[6], group_string=row[7], metadata=row[8])
         return None
 
 
 class RedisDatabase(object):
-    def __init__(self, config):
+    def __init__(self, config, user_baseclass=None):
         self.config = config
         self.conn = None
+        if user_baseclass is None:
+            self.user_baseclass = User
+        else:
+            self.user_baseclass = user_baseclass
 
     def connect(self):
         """
@@ -522,5 +592,5 @@ class RedisDatabase(object):
         raw = c.hget("ad_auth_users", email)
         if raw:
             d = json.loads(raw)
-            return User.from_dict(d)
+            return self.user_baseclass.from_dict(d)
         return None
