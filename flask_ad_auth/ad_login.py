@@ -272,6 +272,7 @@ class ADAuth(LoginManager):
         Close database connection.
         """
         ctx = stack.top
+        self.connected = False
         if hasattr(ctx, 'adauth_db'):
             ctx.adauth_db.close()
 
