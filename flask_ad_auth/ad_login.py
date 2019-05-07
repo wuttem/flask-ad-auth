@@ -528,9 +528,9 @@ class SQLiteDatabase(object):
         """
         c = self.conn.cursor()
         c.execute("INSERT OR REPLACE INTO users (email, access_token, refresh_token, expires_on, "
-                  "token_type, resource, scope, groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                  "token_type, resource, scope, groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                   (user.email, user.access_token, user.refresh_token, user.expires_on,
-                   user.token_type, user.resource, user.scope, user.group_string, user.metadata))
+                   user.token_type, user.resource, user.scope, user.group_string))
         self.conn.commit()
         return user
 
