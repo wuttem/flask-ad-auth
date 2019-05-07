@@ -81,7 +81,7 @@ class User(object):
         self.email = email
         self.access_token = access_token
         self.refresh_token = refresh_token
-        self.expires_on = expires_on
+        self.expires_on = int(expires_on)
         self.token_type = token_type
         self.resource = resource
         self.scope = scope
@@ -91,7 +91,7 @@ class User(object):
         if group_string is None:
             self.groups = []
         else:
-            self.groups = filter(bool, group_string.split(";"))
+            self.groups = list(filter(bool, group_string.split(";")))
         self.ad_manager = None
 
     def set_ad_manager(self, manager):
@@ -527,10 +527,11 @@ class SQLiteDatabase(object):
         given email.
         """
         c = self.conn.cursor()
+        _metadata = json.dumps(user.metadata)
         c.execute("INSERT OR REPLACE INTO users (email, access_token, refresh_token, expires_on, "
-                  "token_type, resource, scope, groups) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                  "token_type, resource, scope, groups, metadata) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
                   (user.email, user.access_token, user.refresh_token, user.expires_on,
-                   user.token_type, user.resource, user.scope, user.group_string))
+                   user.token_type, user.resource, user.scope, user.group_string, _metadata))
         self.conn.commit()
         return user
 
@@ -543,9 +544,10 @@ class SQLiteDatabase(object):
                   "token_type, resource, scope, groups, metadata FROM users WHERE email=?", (email,))
         row = c.fetchone()
         if row:
+            _metadata = json.loads(row[8])
             return self.user_baseclass(email=row[0], access_token=row[1], refresh_token=row[2],
                                        expires_on=int(row[3]), token_type=row[4], resource=row[5],
-                                       scope=row[6], group_string=row[7], metadata=row[8])
+                                       scope=row[6], group_string=row[7], metadata=_metadata)
         return None
 
 

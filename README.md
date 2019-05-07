@@ -58,3 +58,18 @@ def hello_world3():
     logout_user()
     return "Logged out"
 ```
+
+# Build for PIP
+
+```
+python2 setup.py sdist bdist_wheel
+python3 setup.py sdist bdist_wheel
+twine upload dist/*
+```
+
+# Fixes
+
+### Version 0.3 ###
+
+* Fixed SQLite Storage (THX @mowoe)
+* Added SQlite Database Test
