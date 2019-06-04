@@ -107,6 +107,9 @@ class User(object):
         self.metadata.update(metadata_dict)
         self.store()
 
+    def get_metadata_field(self, name, default=None):
+        return self.metadata.get(name, default)
+
     @property
     def group_string(self):
         return ";".join(self.groups)
