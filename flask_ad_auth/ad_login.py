@@ -463,7 +463,10 @@ class ADAuth(LoginManager):
         Query User from db. Will return the user object or None.
         """
         u = self.db_connection.get_user(email)
-        u.set_ad_manager(self)
+        if u is not None:
+            u.set_ad_manager(self)
+        else:
+            logger.warning("user not existing in database")
         return u
 
     def load_user(self, email):
