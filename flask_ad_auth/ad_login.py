@@ -86,12 +86,13 @@ class User(object):
         self.resource = resource
         self.scope = scope
         self.metadata = {}
+        self._group_names = None
         if metadata is not None:
             self.metadata.update(metadata)
         if group_string is None:
-            self.groups = []
+            self._group_ids = []
         else:
-            self.groups = list(filter(bool, group_string.split(";")))
+            self._group_ids = list(filter(bool, group_string.split(";")))
         self.ad_manager = None
 
     def set_ad_manager(self, manager):
@@ -112,11 +113,23 @@ class User(object):
 
     @property
     def group_string(self):
-        return ";".join(self.groups)
+        return ";".join(self._group_ids)
 
     @property
     def is_authenticated(self):
         return True
+
+    @property
+    def groups(self):
+        if self._group_names is None:
+            all_groups = ADAuth.get_all_groups(self.access_token)
+            name_lookup = dict((x["id"], x["name"]) for x in all_groups)
+            new_group_names = []
+            for g in self._group_ids:
+                new_group_names.append(name_lookup.get(g, "MISSING"))
+            self._group_names = new_group_names
+        gs = zip(self._group_ids, self._group_names)
+        return [{"id": g_id, "name": g_name} for g_id, g_name in gs]
 
     @property
     def is_expired(self):
@@ -125,11 +138,12 @@ class User(object):
         return True
 
     def is_in_group(self, group):
-        if group in self.groups:
-            return True
-        else:
-            logger.warning("User {} not in group {}".format(self.email, group))
-            return False
+        for g in self.groups:
+            if g["id"] == group:
+                return True
+            if g["name"].lower() == group.lower():
+                return True
+        return False
 
     def is_in_default_group(self):
         return self.is_in_group(current_app.config["AD_AUTH_GROUP"])
@@ -159,15 +173,12 @@ class User(object):
 
     def refresh_groups(self):
         gs = ADAuth.get_user_groups(self.access_token)
-        self.groups = gs
-        return self.groups
+        self._group_ids = gs
+        self._group_names = None
+        return True
 
     def get_groups_named(self):
-        out = []
-        names = {x["id"]: x["name"] for x in ADAuth.get_all_groups(self.access_token)}
-        for g in self.groups:
-            out.append({"id": g, "name": names.get(g, "unknown")})
-        return out
+        return self.groups
 
     def get_ad_object(self):
         return ADAuth.get_user_object(self.access_token)
@@ -201,6 +212,10 @@ class User(object):
 
 
 class ADAuth(LoginManager):
+    group_name_cache = {}
+    group_name_cache_refresh = None
+    group_name_cache_time = 3600
+
     def __init__(self, app=None, add_context_processor=True, user_baseclass=None):
         """
         Flask extension constructor.
@@ -388,10 +403,7 @@ class ADAuth(LoginManager):
         return r.json()
 
     @classmethod
-    def get_all_groups(cls, access_token):
-        """
-        Get a List of all groups in the organisation with their name.
-        """
+    def load_all_groups_from_ad(cls, access_token):
         headers = {
             "Authorization": "Bearer {}".format(access_token),
             'Accept' : 'application/json'
@@ -402,12 +414,27 @@ class ADAuth(LoginManager):
         url = "{}/{}/groups".format(current_app.config["AD_GRAPH_URL"],
                                     current_app.config["AD_DOMAIN_FOR_GROUPS"])
         r = requests.get(url, headers=headers, params=params)
-        groups = []
         for g in r.json()["value"]:
             g_id = g["objectId"]
             g_name = g["displayName"]
-            groups.append({"id": g_id, "name":g_name})
-        return groups
+            cls.group_name_cache[g_id] = g_name
+        cls.group_name_cache_refresh = time.time()
+        return cls.group_name_cache
+
+    @classmethod
+    def get_all_groups(cls, access_token):
+        """
+        Get a List of all groups in the organisation with their name.
+        """
+        if not cls.group_name_cache_refresh:
+            g = cls.load_all_groups_from_ad(access_token)
+        else:
+            diff = time.time() - cls.group_name_cache_refresh
+            if diff < cls.group_name_cache_time:
+                g = cls.group_name_cache
+            else:
+                g = cls.load_all_groups_from_ad(access_token)
+        return [{"id": key, "name":g[key]} for key in g]
 
     @classmethod
     def get_user_groups(cls, access_token):
