@@ -281,8 +281,6 @@ class ADAuth(LoginManager):
                     raise ValueError("{} is not a valid class".format(app.config["AD_AUTH_USER_BASECLASS"]))
                 self.user_baseclass = c
 
-        itertools = importlib.import_module('itertools')
-
         # Set Storage
         if app.config["AD_STORAGE"] == "sqlite":
             self.setDatabaseClass(SQLiteDatabase)
