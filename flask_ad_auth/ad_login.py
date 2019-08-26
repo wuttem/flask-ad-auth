@@ -16,6 +16,8 @@ import datetime
 import time
 import requests
 import functools
+import importlib
+import inspect
 from collections import namedtuple
 
 try:
@@ -256,6 +258,7 @@ class ADAuth(LoginManager):
         app.config.setdefault("AD_LOGIN_REDIRECT", '/')
         app.config.setdefault("AD_GROUP_FORBIDDEN_REDIRECT", None)
         app.config.setdefault("AD_AUTH_GROUP", None)
+        app.config.setdefault("AD_AUTH_USER_BASECLASS", None)
 
         if hasattr(app, 'teardown_appcontext'):
             app.teardown_appcontext(self.teardown_db)
@@ -265,6 +268,20 @@ class ADAuth(LoginManager):
         # Register Callback
         app.add_url_rule(app.config["AD_CALLBACK_PATH"], "oauth_callback",
                          self.oauth_callback)
+
+        # Set Base Class
+        if app.config["AD_AUTH_USER_BASECLASS"]:
+            if inspect.isclass(app.config["AD_AUTH_USER_BASECLASS"]):
+                self.user_baseclass = app.config["AD_AUTH_USER_BASECLASS"]
+            else:
+                mod, classname = app.config["AD_AUTH_USER_BASECLASS"].rsplit(".", 1)
+                m = importlib.import_module(mod)
+                c = getattr(m, classname)
+                if not inspect.isclass(c):
+                    raise ValueError("{} is not a valid class".format(app.config["AD_AUTH_USER_BASECLASS"]))
+                self.user_baseclass = c
+
+        itertools = importlib.import_module('itertools')
 
         # Set Storage
         if app.config["AD_STORAGE"] == "sqlite":

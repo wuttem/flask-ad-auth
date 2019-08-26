@@ -96,6 +96,10 @@ twine upload dist/*
 
 # Changes
 
+### Version 0.6 ###
+
+* New Config: "AD_AUTH_USER_BASECLASS" sets the base for all Users
+
 ### Version 0.5 ###
 
 * Added Group Name Cache
