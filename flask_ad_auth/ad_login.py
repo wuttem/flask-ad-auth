@@ -6,7 +6,7 @@ import sqlite3
 try:
     from urlparse import urlparse, urlunparse
     from urllib import urlencode
-except ModuleNotFoundError:
+except ImportError:
     from urllib.parse import urlparse, urlunparse, urlencode
 
 import json
@@ -167,6 +167,8 @@ class User(object):
 
     def full_refresh(self):
         refresh_result = ADAuth.refresh_oauth_token(self.refresh_token)
+        if refresh_result is None:
+            return False
         self.access_token = refresh_result.access_token
         self.refresh_token = refresh_result.refresh_token
         self.expires_on = int(refresh_result.expires_on)
@@ -397,6 +399,9 @@ class ADAuth(LoginManager):
         }
         r = requests.post(current_app.config["AD_TOKEN_URL"],
                           data=refresh_params).json()
+        if "access_token" not in r or not r["access_token"]:
+            logger.error("error refreshing user. result: {}".format(r))
+            return None
         return RefreshToken(access_token=r["access_token"],
                             refresh_token=r["refresh_token"],
                             expires_on=r["expires_on"])
@@ -526,7 +531,8 @@ class ADAuth(LoginManager):
             # Try to refresh with refresh token
             else:
                 logger.warning("Refreshing user %s", email)
-                user.full_refresh()
+                if not user.full_refresh():
+                    return None
                 self.store_user(user)
                 g.user_id = user.email
                 return user

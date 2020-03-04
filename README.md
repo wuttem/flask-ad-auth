@@ -25,7 +25,7 @@ Next step is registering an app that has read permissions to the Azure AD. You'l
 
 ## Configuration
 You need to set the following Flask Config Variables:
-- AD_SQLITE_DB = "my_user_db.db3" 
+- AD_SQLITE_DB = "my_user_db.db3"
 - AD_APP_ID = "FROM ABOVE"
 - AD_APP_KEY = "FROM ABOVE"
 - AD_REDIRECT_URI = "http://localhost:5000/connect/get_token" # for testing on localhost
@@ -95,6 +95,10 @@ twine upload dist/*
 ```
 
 # Changes
+
+### Version 0.7 ###
+
+* Fixed an edge case in which the refresh token was not accepted anymore
 
 ### Version 0.6 ###
 
