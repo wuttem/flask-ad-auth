@@ -96,6 +96,10 @@ twine upload dist/*
 
 # Changes
 
+### Version 0.8 ###
+
+* Fixed Setup for pypi installs
+
 ### Version 0.7 ###
 
 * Fixed an edge case in which the refresh token was not accepted anymore

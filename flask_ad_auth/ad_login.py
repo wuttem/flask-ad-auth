@@ -295,7 +295,7 @@ class ADAuth(LoginManager):
         super(ADAuth, self).init_app(
             app=app, add_context_processor=add_context_processor)
 
-        self.user_callback = self.load_user
+        self.user_loader(self.load_user)
 
     def setDatabaseClass(self, my_class):
         if self.connected:
