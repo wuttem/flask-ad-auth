@@ -8,6 +8,7 @@ user in your organisation or if he belongs to a specific group.
 ## Register an Azure AD App ##
 
 *Important*
+
 This it the link to the Microsoft Doc for registering an App: https://learn.microsoft.com/en-us/graph/auth-register-app-v2
 If you have problems use this documentation as I will not be able to always keep this doc up to date.
 
@@ -17,8 +18,6 @@ You need to register an app that has read permissions to the Azure AD. You'll ne
 - Enter a friendly name for the application, for example "Example Azure AD Read App", select "Web" and use `http://localhost:5000/connect/get_token` as a Redirect URI.
 - Find the Client ID value and copy it aside, you will need this later when configuring your application.
 - While still in the Azure portal, click the "Certificates & secrets" tab of the application you created.
-- 
-
 - Create a new "Client Secret" - the keyValue will be displayed after you save the configuration at the end - it will be displayed, and you should save this to a secure location. **Note, that the key value is only displayed once, and you will not be able to retrieve it later**.
 - Configure Permissions - under the "Permissions to other applications" section, you will configure permissions to access the Graph.
 - The following Permissions are needed to use all features of this library: Group.Read.All, User.Read, User.Read.All.
