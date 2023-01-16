@@ -252,7 +252,7 @@ class ADAuth(LoginManager):
         app.config.setdefault("AD_APP_ID", None)
         app.config.setdefault("AD_APP_KEY", None)
         app.config.setdefault("AD_REDIRECT_URI", None)
-        app.config.setdefault("AD_DOMAIN_FOR_GROUPS", "smaxtec.com")
+        app.config.setdefault("AD_DOMAIN_FOR_GROUPS", "example.com")
         app.config.setdefault("AD_AUTH_URL", 'https://login.microsoftonline.com/common/oauth2/authorize')
         app.config.setdefault("AD_TOKEN_URL", 'https://login.microsoftonline.com/common/oauth2/token')
         app.config.setdefault("AD_GRAPH_URL", 'https://graph.windows.net')

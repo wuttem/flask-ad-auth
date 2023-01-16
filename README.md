@@ -6,28 +6,31 @@ users for you flask application. You can Check if an user has a azureAD
 user in your organisation or if he belongs to a specific group.
 
 ## Register an Azure AD App ##
-Next step is registering an app that has read permissions to the Azure AD. You'll need to clientid and clientsecret of this app in order to run this sample against your Azure AD. Follow below steps to register an Azure app:
-- Sign in to the Azure management portal
-- Click on Active Directory in the left hand nav
-- Click the directory tenant where you wish to register the sample application
-- Click the Applications tab
-- In the drawer, click Add
-- Click "Add an application my organization is developing"
-- Enter a friendly name for the application, for example "Read Azure AD from SharePoint apps", select "Web Application and/or Web API", and click next
-8. For the Sign-on URL, enter a value (this is not used for the console app, so is only needed for this initial configuration): "http://localhost"
-- For the App ID URI, enter "http://localhost". Click the checkmark to complete the initial configuration
-- While still in the Azure portal, click the Configure tab of your application
-- Find the Client ID value and copy it aside, you will need this later when configuring your application
-- Under the Keys section, select either a 1year or 2year key - the keyValue will be displayed after you save the configuration at the end - it will be displayed, and you should save this to a secure location. **Note, that the key value is only displayed once, and you will not be able to retrieve it later**
-- Configure Permissions - under the "Permissions to other applications" section, you will configure permissions to access the Graph
-- The following Permissions are needed: Group.Read.All, User.Read, User.Read.All
-- Select the Save button at the bottom of the screen - **upon successful configuration, your Key value should now be displayed - please copy and store this value in a secure location**
+
+*Important*
+This it the link to the Microsoft Doc for registering an App: https://learn.microsoft.com/en-us/graph/auth-register-app-v2
+If you have problems use this documentation as I will not be able to always keep this doc up to date.
+
+You need to register an app that has read permissions to the Azure AD. You'll need to add clientid and clientsecret of this app in order to run this sample against your Azure AD. Follow below steps to register an Azure app:
+- Sign in to the Azure management portal and to the Azure Active Directory Tab: https://aad.portal.azure.com/
+- Goto: "App Registrations" and click "New registration".
+- Enter a friendly name for the application, for example "Example Azure AD Read App", select "Web" and use `http://localhost:5000/connect/get_token` as a Redirect URI.
+- Find the Client ID value and copy it aside, you will need this later when configuring your application.
+- While still in the Azure portal, click the "Certificates & secrets" tab of the application you created.
+- 
+
+- Create a new "Client Secret" - the keyValue will be displayed after you save the configuration at the end - it will be displayed, and you should save this to a secure location. **Note, that the key value is only displayed once, and you will not be able to retrieve it later**.
+- Configure Permissions - under the "Permissions to other applications" section, you will configure permissions to access the Graph.
+- The following Permissions are needed to use all features of this library: Group.Read.All, User.Read, User.Read.All.
+- Add additional Perimissions that you need here.
+
+**To use this on a server you have to replace the REDIRECT_URL with your domain. You might also want to configure a "Front-channel logout URL" that redirects to your logout page.**
 
 ## Configuration
 You need to set the following Flask Config Variables:
 - AD_SQLITE_DB = "my_user_db.db3"
-- AD_APP_ID = "FROM ABOVE"
-- AD_APP_KEY = "FROM ABOVE"
+- AD_APP_ID = "CLIENT ID FROM ABOVE"
+- AD_APP_KEY = "SECRET VALUE FROM ABOVE"
 - AD_REDIRECT_URI = "http://localhost:5000/connect/get_token" # for testing on localhost
 
 # Usage
@@ -41,8 +44,9 @@ app = Flask(__name__)
 app.secret_key = <SOME SECRET KEY>
 app.config.update(
     AD_SQLITE_DB = "my_user_db.db3",
-    AD_APP_ID = <YOUR APP ID>,
-    AD_APP_KEY = <YOUR APP KEY>,
+    AD_APP_ID = <YOUR CLIENT ID>,
+    AD_APP_KEY = <YOUR SECRET>,
+    AD_DOMAIN_FOR_GROUPS = <YOUR AD DOMAIN>,
     AD_REDIRECT_URI = "http://localhost:5000/connect/get_token",
     AD_LOGIN_REDIRECT = "/login_form"
 )
@@ -60,26 +64,26 @@ def redirect_unauthorized():
         if not current_user or not current_user.is_authenticated:
             return redirect(login_form_url)
 app.before_request(redirect_unauthorized)
-
 @app.route('/protected')
 @login_required
 def protected_view():
-    return "Logged in as {}".format(current_user.email)
+    return "Logged in as: {}".format(current_user.email)
 
 @app.route('/group_protected')
 @ad_group_required("sdadsad-6a93-d3432-a4be-f1cbsdsaa0d4")
 def group_protected_view():
-    return "Logged in as {}".format(current_user.email)
+    return "Logged in as: {}".format(current_user.email)
 
 @app.route('/logout')
 def logout():
     logout_user()
     return 'Logged out<br/><a href="{}">goto login page</a>'.format(url_for("login_form"))
 
+@app.route('/')
 @app.route('/login_form')
 def login_form():
     if current_user.is_authenticated:
-        return 'logged in<br/><a href="{}">logout</a>'.format(url_for("logout"))
+        return 'logged in as {}<br/><a href="{}">logout</a>'.format(current_user.email, url_for("logout"))
     return 'not logged in<br/><a href="{}">login</a>'.format(ad_auth.sign_in_url)
 
 if __name__ == '__main__':
@@ -95,6 +99,10 @@ twine upload dist/*
 ```
 
 # Changes
+
+### Version 0.8.2 ###
+* Small changes to doc and example
+
 
 ### Version 0.8 ###
 
