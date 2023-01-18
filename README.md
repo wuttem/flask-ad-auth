@@ -27,9 +27,10 @@ You need to register an app that has read permissions to the Azure AD. You'll ne
 
 ## Configuration
 You need to set the following Flask Config Variables:
-- AD_SQLITE_DB = "my_user_db.db3"
+- AD_SQLITE_DB = "my_user_db.db3" # or use REDIS
 - AD_APP_ID = "CLIENT ID FROM ABOVE"
 - AD_APP_KEY = "SECRET VALUE FROM ABOVE"
+- AD_TENANT_ID = "YOUR AZURE AD TENANT ID)
 - AD_REDIRECT_URI = "http://localhost:5000/connect/get_token" # for testing on localhost
 
 # Usage
@@ -45,7 +46,7 @@ app.config.update(
     AD_SQLITE_DB = "my_user_db.db3",
     AD_APP_ID = <YOUR CLIENT ID>,
     AD_APP_KEY = <YOUR SECRET>,
-    AD_DOMAIN_FOR_GROUPS = <YOUR AD DOMAIN>,
+    AD_TENANT_ID = <TENANT>
     AD_REDIRECT_URI = "http://localhost:5000/connect/get_token",
     AD_LOGIN_REDIRECT = "/login_form"
 )
@@ -55,14 +56,6 @@ ad_auth.init_app(app)
 # In you Views:
 from flask_ad_auth import login_required, current_user, ad_group_required, logout_user
 
-# optional automatic redirect to login form:
-def redirect_unauthorized():
-    login_form_url = url_for("login_form")
-    # we need to make sure that we dont redirect on login requests
-    if login_form_url not in request.url and "/get_token" not in request.url:
-        if not current_user or not current_user.is_authenticated:
-            return redirect(login_form_url)
-app.before_request(redirect_unauthorized)
 @app.route('/protected')
 @login_required
 def protected_view():
@@ -99,7 +92,17 @@ twine upload dist/*
 
 # Changes
 
+### Version 1.0.1 ###
+
+** This release might break compatibility! Make sure you are using the right config values **
+
+* Rewrite using msal: https://github.com/AzureAD/microsoft-authentication-library-for-python
+* Using new Auth Flow as recommended by Microsoft
+* Removed some old stuff
+
+
 ### Version 0.8.2 ###
+
 * Small changes to doc and example
 
 
