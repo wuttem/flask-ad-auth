@@ -4,11 +4,12 @@ from flask import url_for, redirect, request
 from flask_ad_auth import ADAuth
 
 app = Flask(__name__)
-app.secret_key = <SOME SECRET KEY>
+app.secret_key = "<SOME SECRET KEY>"
 app.config.update(
     AD_SQLITE_DB = "my_user_db.db3",
-    AD_APP_ID = <YOUR APP ID>,
-    AD_APP_KEY = <YOUR APP KEY>,
+    AD_APP_ID = "<YOUR APP ID>",
+    AD_APP_KEY = "<YOUR APP KEY>",
+    AD_TENANT_ID = "<TENANT>",
     AD_REDIRECT_URI = "http://localhost:5000/connect/get_token",
     AD_LOGIN_REDIRECT = "/login_form"
 )

@@ -18,12 +18,13 @@ config = {
         "Programming Language :: Python :: 3",
         "Topic :: System :: Systems Administration :: Authentication/Directory",
     ],
-    "version": "1.0.1",
+    "version": "1.1.0",
     'install_requires': [
         "flask",
         "werkzeug",
         "flask-login",
-        "requests"
+        "requests",
+        "msal"
     ],
     'tests_require': ["pytest", "mock"],
     "packages": find_packages(),

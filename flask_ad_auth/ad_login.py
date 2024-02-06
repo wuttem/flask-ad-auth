@@ -29,7 +29,6 @@ except Exception:
     redis = None
 
 from flask import current_app, request, abort, redirect, make_response, g, flash, url_for
-from flask import _app_ctx_stack as stack
 from flask_login import LoginManager, login_user, current_user
 
 
@@ -327,19 +326,16 @@ class ADAuth(LoginManager):
         """
         Flask extension constructor.
         """
-        super(ADAuth, self).__init__(
-            app=app, add_context_processor=add_context_processor)
         self.connection_class = SQLiteDatabase
-        self.connected = False
         self.on_login_callback = None
         if user_baseclass is not None:
             self.user_baseclass = user_baseclass
         else:
             self.user_baseclass = User
+        super(ADAuth, self).__init__(
+            app=app, add_context_processor=add_context_processor)
 
     def set_user_baseclass(self, user_baseclass):
-        if self.connected:
-            raise RuntimeError("User base class change after connecting")
         self.user_baseclass = user_baseclass
 
     def init_app(self, app, add_context_processor=True):
@@ -368,8 +364,6 @@ class ADAuth(LoginManager):
 
         if hasattr(app, 'teardown_appcontext'):
             app.teardown_appcontext(self.teardown_db)
-        else:
-            app.teardown_request(self.teardown_db)
 
         # Register Callback
         app.add_url_rule(app.config["AD_CALLBACK_PATH"], "auth_callback",
@@ -407,20 +401,18 @@ class ADAuth(LoginManager):
         super(ADAuth, self).init_app(
             app=app, add_context_processor=add_context_processor)
         self.user_loader(self.load_user)
+        self.flask_app = app
 
     def setDatabaseClass(self, my_class):
-        if self.connected:
-            raise RuntimeError("Connection class change after connecting")
         self.connection_class = my_class
 
     def teardown_db(self, exception):
         """
         Close database connection.
         """
-        ctx = stack.top
-        self.connected = False
-        if hasattr(ctx, 'adauth_db'):
-            ctx.adauth_db.close()
+        adauth_db = g.pop('adauth_db', None)
+        if adauth_db is not None:
+            adauth_db.close()
 
     @property
     def db_connection(self):
@@ -428,14 +420,11 @@ class ADAuth(LoginManager):
         Connection property. Use this to get the connection.
         It will create a reusable connection on the flask context.
         """
-        ctx = stack.top
-        if ctx is not None:
-            if not hasattr(ctx, 'adauth_db'):
-                ctx.adauth_db = self.connection_class(current_app.config,
-                                                      user_baseclass=self.user_baseclass)
-                ctx.adauth_db.connect()
-                self.connected = True
-            return ctx.adauth_db
+        if 'adauth_db' not in g:
+            g.adauth_db = self.connection_class(current_app.config,
+                                                user_baseclass=self.user_baseclass)
+            g.adauth_db.connect()
+        return g.adauth_db
 
     @property
     def sign_in_url(self):

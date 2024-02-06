@@ -92,6 +92,10 @@ twine upload dist/*
 
 # Changes
 
+## Version 1.1.0 ###
+
+* Fixed imports for flask 3.0
+
 ### Version 1.0.1 ###
 
 ** This release might break compatibility! Make sure you are using the right config values **
