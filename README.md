@@ -30,8 +30,9 @@ You need to set the following Flask Config Variables:
 - AD_SQLITE_DB = "my_user_db.db3" # or use REDIS
 - AD_APP_ID = "CLIENT ID FROM ABOVE"
 - AD_APP_KEY = "SECRET VALUE FROM ABOVE"
-- AD_TENANT_ID = "YOUR AZURE AD TENANT ID)
+- AD_TENANT_ID = "YOUR AZURE AD TENANT ID"
 - AD_REDIRECT_URI = "http://localhost:5000/connect/get_token" # for testing on localhost
+- AD_DOMAIN_FOR_GROUPS = "YOUR AZURE AD DOMAIN NAME [example.com]" # Mandatory if you want to use @ad_group_required("<azure_ad_group_uuid>")
 
 # Usage
 ```
