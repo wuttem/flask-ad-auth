@@ -1,9 +1,19 @@
 # flask-ad-auth
+
+[![PyPI version](https://badge.fury.io/py/flask-ad-auth.svg)](https://badge.fury.io/py/flask-ad-auth)
+
 Flask Azure AD Authorization Extension (based on flask-login)
 
-This will use the login with Microsoft AZure AD functionality to authorize
-users for you flask application. You can Check if an user has a azureAD
-user in your organisation or if he belongs to a specific group.
+This will use the login with Microsoft Azure AD functionality to authorize
+users for you flask application. You can check if an user is in your AD or if he belongs to a specific group.
+
+
+## Installation
+
+```bash
+pip install flask-ad-auth
+```
+
 
 ## Register an Azure AD App ##
 
@@ -93,9 +103,10 @@ twine upload dist/*
 
 # Changes
 
-### Version 1.1.1 ###
+### Version 1.1.2 ###
 
 * Fixed Readme and added some more information
+* Fixed Pypi build and added badge
 
 
 ### Version 1.1.0 ###
