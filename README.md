@@ -93,7 +93,12 @@ twine upload dist/*
 
 # Changes
 
-## Version 1.1.0 ###
+### Version 1.1.1 ###
+
+* Fixed Readme and added some more information
+
+
+### Version 1.1.0 ###
 
 * Fixed imports for flask 3.0
 
