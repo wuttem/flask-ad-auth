@@ -453,7 +453,7 @@ class ADAuth(LoginManager):
         # try to migrate the refresh token to cache
         res = self.client.acquire_token_by_refresh_token(user.refresh_token, scopes=DEFAULT_SCOPE)
         if "error" in res:
-            logger.warning("Refresh Error: {}").format(res.get("error"))
+            logger.warning("Refresh Error: {}".format(res.get("error")))
             return None
         logger.info("got token from db refresh")
         return res
