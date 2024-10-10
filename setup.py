@@ -18,7 +18,7 @@ config = {
         "Programming Language :: Python :: 3",
         "Topic :: System :: Systems Administration :: Authentication/Directory",
     ],
-    "version": "1.1.2",
+    "version": "1.1.3",
     'install_requires': [
         "flask",
         "werkzeug",

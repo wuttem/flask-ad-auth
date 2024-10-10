@@ -103,6 +103,10 @@ twine upload dist/*
 
 # Changes
 
+### Version 1.1.3 ###
+
+* Fixed warning for failed token refresh
+
 ### Version 1.1.2 ###
 
 * Fixed Readme and added some more information
